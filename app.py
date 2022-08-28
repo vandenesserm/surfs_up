@@ -14,7 +14,8 @@ from flask import Flask, jsonify
 
 
 #Set Up the Db:
-engine = create_engine("sqlite:///hawaii.sqlite")
+engine = create_engine("sqlite:///hawaii.sqlite", connect_args={'check_same_thread': False})
+
 Base = automap_base()
 Base.prepare(engine, reflect=True)
 
@@ -36,11 +37,8 @@ def welcome():
     /api/v1.0/precipitation <br/>
     /api/v1.0/stations <br/>
     /api/v1.0/tobs <br/>
-    /api/v1.0/temp/start/end <br/>
+    /api/v1.0/date/start/end <br/>
     ''')
-
-if __name__ == '__main__':
-   app.run()
 
 # Precipitation Route:
 @app.route("/api/v1.0/precipitation")
@@ -52,14 +50,14 @@ def precipitation():
    return jsonify(precip)
 
 # Stations Route:
-@ap.route("/api/v1.0/stations")
+@app.route("/api/v1.0/stations")
 def stations():
     results = session.query(Station.station).all()
     stations = list(np.ravel(results))
-    return
+    return jsonify(stations = stations)
 
 # Monthly Temperature Route:
-@ap.route("/api/v1.0/tobs")
+@app.route("/api/v1.0/tobs")
 def temp_monthly():
     prev_year = dt.date(2017, 8, 23) - dt.timedelta(days=365)
     results = session.query(Measurement.tobs).\
@@ -69,18 +67,36 @@ def temp_monthly():
     return jsonify(temps=temps)
 
 # Statistics Route:
-@ap.route("/api/v1.0/tobs")
-def stats(start=None, end=None):
-    sel = [func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)]
+@app.route("/api/v1.0/date/<start>")
+@app.route("/api/v1.0/date/<start>/<end>")
+def sttenddates(start=None, end=None):
+    session = Session(engine)
 
+    """* Return a JSON list of the minimum temperature, the average temperature, and the max temperature for a given start or start-end range.
+    * When given the start only or the start/end date, calculate `TMIN`, `TAVG`, and `TMAX` for all dates greater than and equal to the start date."""
+    # SELECT Statement
+    sel = [func.min(Measurement.tobs), func.avg(
+        Measurement.tobs), func.max(Measurement.tobs)]
+    print("======================")
+    print(*sel)
+    print("======================")
     if not end:
-        results = session.query(*sel).\
-            filter(Measurement.date >= start).all()
-        temps = list(np.ravel(results))
-        return jsonify(temps)
+        # calculate min, max, avg for dates greater than start
+        # results = session.query(*sel).filter(Measurement.date >= start).all()
 
-    results = session.query(*sel).\
-        filter(Measurement.date >= start).\
-        filter(Measurement.date <= end).all()
+        results = session.query(func.min(Measurement.tobs), func.avg(
+            Measurement.tobs), func.max(Measurement.tobs)).filter(Measurement.date >= start).all()
+
+    else:
+        # calculate min, max, avg for dates between start and stop
+        results = session.query(
+            func.min(Measurement.tobs), func.avg(
+                Measurement.tobs), func.max(Measurement.tobs)).filter(Measurement.date >= start).filter(Measurement.date <= end).all()
+    # unravel results into a 1D array and convert to list
     temps = list(np.ravel(results))
-    return jsonify(temps)
+
+    session.close
+    return jsonify(temps=temps)
+
+if __name__ == "__main__":
+    app.run(debug=True)
